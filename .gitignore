@@ -1,0 +1,38 @@
+# Go build
+/bin/
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Dependency directories
+/vendor/
+
+# IDE/editor
+*.swp
+*.swo
+*.bak
+*.tmp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Database
+meta.db*
+
+# Coverage
+coverage.out
+
+# Logs
+*.log
+
+# Node/npm (if any future frontend)
+node_modules/
+dist/
+
+# Do NOT ignore .idea or .vscode
+!.idea/
+!.vscode/

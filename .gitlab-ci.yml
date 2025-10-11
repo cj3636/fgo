@@ -1,0 +1,40 @@
+variables:
+  GO_VERSION: "1.24"
+  REG_URL: "registry.tyss.io/cj3636/ci-images"
+
+.default-go:
+  image: "$REG_URL/go$GO_VERSION:latest"
+
+stages:
+  - build
+  - test
+  - coverage
+
+build:
+  extends: .default-go
+  stage: build
+  script:
+    - go build -v ./...
+  artifacts:
+    paths:
+      - gofile
+    expire_in: 1 week
+
+unit-test:
+  extends: .default-go
+  stage: test
+  script:
+    - go test -v ./...
+  coverage: '/^coverage: (\d+\.?\d*)%/'
+
+coverage:
+  extends: .default-go
+  stage: coverage
+  script:
+    - go test -coverprofile=coverage.out ./...
+    - go tool cover -func=coverage.out
+  coverage: '/^total:.* (\d+\.?\d*)%/'
+  artifacts:
+    paths:
+      - coverage.out
+    expire_in: 1 week
