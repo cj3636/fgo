@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
-  title: GoFile / fGo API (v0.1.0)
-  version: 0.1.0
+  title: GoFile / fGo API (v0.1.0-alpha)
+  version: 0.1.0-alpha
   summary: Minimal git‑lite file server API. Idempotent blob uploads, plan→finalize place, linear history on `main`.
   cmd_map:
     space: namespace
