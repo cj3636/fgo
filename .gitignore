@@ -1,18 +1,15 @@
 # Go build artifacts
 bin/
+out/
+dist/
 fgo
 gofile
 *.exe
-*.dll
-*.so
-*.dylib
-*.test
-*.out
-
-# Dependency directories
-vendor/
 
 # IDE/editor
+# .editorconfig
+# !.idea/
+# !.vscode/
 *.swp
 *.swo
 *.bak
@@ -22,23 +19,17 @@ vendor/
 .DS_Store
 Thumbs.db
 
-# Database & File Storage
+# Database & Blobs
 blobs/
 *.db
 meta.db-sh
 meta.db-wal
 
-# Tests
-*.test
-temp_part.txt
-
-# Coverage
-coverage.out
+# Tests / Coverage
+*.out
 *.coverprofile
 
 # Logs
 *.log
-
-# Do NOT ignore .idea or .vscode
-!.idea/
-!.vscode/
+logs/
+log/
