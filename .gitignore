@@ -20,8 +20,10 @@
 .DS_Store
 Thumbs.db
 
-# Database
+# Database & File Storage
+*.sqlite3
 meta.db*
+blobs
 
 # Tests
 *.test
