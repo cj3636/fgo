@@ -1,5 +1,7 @@
-# Go build
-/bin/
+# Go build artifacts
+bin/
+fgo
+gofile
 *.exe
 *.dll
 *.so
@@ -8,7 +10,7 @@
 *.out
 
 # Dependency directories
-/vendor/
+vendor/
 
 # IDE/editor
 *.swp
@@ -21,9 +23,10 @@
 Thumbs.db
 
 # Database & File Storage
-*.sqlite3
-meta.db*
-blobs
+blobs/
+*.db
+meta.db-sh
+meta.db-wal
 
 # Tests
 *.test
@@ -32,12 +35,9 @@ temp_part.txt
 # Coverage
 coverage.out
 *.coverprofile
+
 # Logs
 *.log
-
-# Node/npm (if any future frontend)
-node_modules/
-dist/
 
 # Do NOT ignore .idea or .vscode
 !.idea/
