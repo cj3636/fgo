@@ -427,7 +427,7 @@ Known limitations before v1:
 
 ## 9) Decision Log (template)
 
-[Copilot Log File](../.github/copilot.log.md)
+[Copilot Log File](../../.github/copilot.log.md)
 
 Log consequential choices; keep short.
 

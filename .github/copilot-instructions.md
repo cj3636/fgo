@@ -71,5 +71,5 @@ minimal but stable wire protocol and a thin CLI later. Each stage is productionâ
 
 ## Current Instructions
 
-- Continue working on the steps in [Roadmap](../ROADMAP.md)
+- Continue working on the steps in [Roadmap](../docs/ROADMAP.md)
 - Check off items as you complete them
