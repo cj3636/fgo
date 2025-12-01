@@ -1,0 +1,6 @@
+# fGo server config (YAML)
+# Only one format supported for simplicity
+port: 8080
+blob_store: ./blobs
+meta_store: ./meta.db
+# Add more config options as needed

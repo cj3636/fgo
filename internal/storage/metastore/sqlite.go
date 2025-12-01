@@ -14,8 +14,31 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// SQLiteMetaStore implements MetadataStore using SQLite
 type SQLiteMetaStore struct {
 	db *sql.DB
+}
+
+// ListCommits returns recent N commits for a box/branch
+func (s *SQLiteMetaStore) ListCommits(ctx context.Context, boxID, branch string, limit int) ([]Commit, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id FROM commits WHERE box_id=? AND branch=? ORDER BY timestamp DESC LIMIT ?`, boxID, branch, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Commit
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		c, err := s.GetCommitByID(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, nil
 }
 
 func NewSQLiteMetaStore(path string) (*SQLiteMetaStore, error) {
@@ -65,33 +88,33 @@ func fallbackSchema(db *sql.DB) error {
 			namespace_id TEXT NOT NULL DEFAULT 'global',
 			name TEXT NOT NULL,
 			visibility TEXT NOT NULL CHECK (visibility IN ('public','unlisted','private')),
-			default_arm TEXT NOT NULL DEFAULT 'main',
+			default_branch TEXT NOT NULL DEFAULT 'main',
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL,
 			UNIQUE(namespace_id, name)
 		);`,
-		`CREATE TABLE IF NOT EXISTS enacts (
+		`CREATE TABLE IF NOT EXISTS commits (
 			id TEXT PRIMARY KEY,
 			box_id TEXT NOT NULL,
-			arm TEXT NOT NULL,
+			branch TEXT NOT NULL,
 			parent_id TEXT,
 			message TEXT,
 			author TEXT,
 			timestamp TEXT NOT NULL
 		);`,
 		`CREATE TABLE IF NOT EXISTS entries (
-			enact_id TEXT NOT NULL,
+			commit_id TEXT NOT NULL,
 			path TEXT NOT NULL,
 			sha256 TEXT NOT NULL,
 			size INTEGER NOT NULL,
 			mode INTEGER NOT NULL,
-			PRIMARY KEY (enact_id, path)
+			PRIMARY KEY (commit_id, path)
 		);`,
 		`CREATE TABLE IF NOT EXISTS refs (
 			box_id TEXT NOT NULL,
-			arm TEXT NOT NULL,
-			enact_id TEXT NOT NULL,
-			PRIMARY KEY (box_id, arm)
+			branch TEXT NOT NULL,
+			commit_id TEXT NOT NULL,
+			PRIMARY KEY (box_id, branch)
 		);`,
 	}
 	for _, stmt := range minimal {
@@ -114,7 +137,7 @@ func (s *SQLiteMetaStore) CreateBox(ctx context.Context, b Box) (Box, error) {
 		b.Visibility = "public"
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	_, err := s.db.ExecContext(ctx, `INSERT INTO boxes(id, namespace_id, name, visibility, default_arm, created_at, updated_at) VALUES(?,?,?,?,?,?,?)`,
+	_, err := s.db.ExecContext(ctx, `INSERT INTO boxes(id, namespace_id, name, visibility, default_branch, created_at, updated_at) VALUES(?,?,?,?,?,?,?)`,
 		b.ID, b.NamespaceID, b.Name, b.Visibility, b.DefaultBranch, now, now)
 	if err != nil {
 		return Box{}, err
@@ -123,7 +146,7 @@ func (s *SQLiteMetaStore) CreateBox(ctx context.Context, b Box) (Box, error) {
 }
 
 func (s *SQLiteMetaStore) GetBox(ctx context.Context, ns, name string) (Box, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT id, namespace_id, name, visibility, default_arm FROM boxes WHERE namespace_id=? AND name=?`, ns, name)
+	row := s.db.QueryRowContext(ctx, `SELECT id, namespace_id, name, visibility, default_branch FROM boxes WHERE namespace_id=? AND name=?`, ns, name)
 	var b Box
 	if err := row.Scan(&b.ID, &b.NamespaceID, &b.Name, &b.Visibility, &b.DefaultBranch); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -142,14 +165,14 @@ func (s *SQLiteMetaStore) SaveCommit(ctx context.Context, c Commit) (Commit, err
 		c.Timestamp = time.Now().UTC().Format(time.RFC3339Nano)
 	}
 	// Insert enact
-	_, err := s.db.ExecContext(ctx, `INSERT INTO enacts(id, box_id, arm, parent_id, message, author, timestamp) VALUES(?,?,?,?,?,?,?)`,
+	_, err := s.db.ExecContext(ctx, `INSERT INTO commits(id, box_id, branch, parent_id, message, author, timestamp) VALUES(?,?,?,?,?,?,?)`,
 		c.ID, c.BoxID, c.Branch, c.ParentID, c.Message, c.Author, c.Timestamp)
 	if err != nil {
 		return Commit{}, err
 	}
 	// Insert entries
 	for _, e := range c.Entries {
-		_, err := s.db.ExecContext(ctx, `INSERT INTO entries(enact_id, path, sha256, size, mode) VALUES(?,?,?,?,?)`,
+		_, err := s.db.ExecContext(ctx, `INSERT INTO entries(commit_id, path, sha256, size, mode) VALUES(?,?,?,?,?)`,
 			c.ID, e.Path, e.SHA256, e.Size, e.Mode)
 		if err != nil {
 			return Commit{}, err
@@ -165,7 +188,7 @@ func newULID() string {
 }
 
 func (s *SQLiteMetaStore) LatestCommit(ctx context.Context, boxID string, branch string) (Commit, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT enact_id FROM refs WHERE box_id=? AND arm=?`, boxID, branch)
+	row := s.db.QueryRowContext(ctx, `SELECT commit_id FROM refs WHERE box_id=? AND branch=?`, boxID, branch)
 	var id string
 	if err := row.Scan(&id); err != nil {
 		return Commit{}, err
@@ -174,7 +197,7 @@ func (s *SQLiteMetaStore) LatestCommit(ctx context.Context, boxID string, branch
 }
 
 func (s *SQLiteMetaStore) GetCommitByID(ctx context.Context, id string) (Commit, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT id, box_id, arm, parent_id, message, author, timestamp FROM enacts WHERE id=?`, id)
+	row := s.db.QueryRowContext(ctx, `SELECT id, box_id, branch, parent_id, message, author, timestamp FROM commits WHERE id=?`, id)
 	var c Commit
 	var parent sql.NullString
 	if err := row.Scan(&c.ID, &c.BoxID, &c.Branch, &parent, &c.Message, &c.Author, &c.Timestamp); err != nil {
@@ -184,7 +207,7 @@ func (s *SQLiteMetaStore) GetCommitByID(ctx context.Context, id string) (Commit,
 		c.ParentID = &parent.String
 	}
 	// Entries
-	rows, err := s.db.QueryContext(ctx, `SELECT path, sha256, size, mode FROM entries WHERE enact_id=?`, id)
+	rows, err := s.db.QueryContext(ctx, `SELECT path, sha256, size, mode FROM entries WHERE commit_id=?`, id)
 	if err != nil {
 		return Commit{}, err
 	}
@@ -201,7 +224,7 @@ func (s *SQLiteMetaStore) GetCommitByID(ctx context.Context, id string) (Commit,
 
 func (s *SQLiteMetaStore) MoveRef(ctx context.Context, boxID, branch, parentID, newID string) error {
 	// Check current ref
-	row := s.db.QueryRowContext(ctx, `SELECT enact_id FROM refs WHERE box_id=? AND arm=?`, boxID, branch)
+	row := s.db.QueryRowContext(ctx, `SELECT commit_id FROM refs WHERE box_id=? AND branch=?`, boxID, branch)
 	var cur string
 	if err := row.Scan(&cur); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -209,20 +232,21 @@ func (s *SQLiteMetaStore) MoveRef(ctx context.Context, boxID, branch, parentID, 
 			if parentID != "" {
 				return fmt.Errorf("parent mismatch")
 			}
-			_, err := s.db.ExecContext(ctx, `INSERT INTO refs(box_id, arm, enact_id) VALUES(?,?,?)`, boxID, branch, newID)
+			_, err := s.db.ExecContext(ctx, `INSERT INTO refs(box_id, branch, commit_id) VALUES(?,?,?)`, boxID, branch, newID)
 			return err
 		}
 		return err
 	}
 	if cur != parentID {
+		fmt.Printf("[DEBUG] MoveRef: boxID=%s branch=%s current ref=%s, parentID=%s newID=%s\n", boxID, branch, cur, parentID, newID)
 		return fmt.Errorf("parent mismatch")
 	}
-	_, err := s.db.ExecContext(ctx, `UPDATE refs SET enact_id=? WHERE box_id=? AND arm=?`, newID, boxID, branch)
+	_, err := s.db.ExecContext(ctx, `UPDATE refs SET commit_id=? WHERE box_id=? AND branch=?`, newID, boxID, branch)
 	return err
 }
 
 func (s *SQLiteMetaStore) ListPublicBoxes(ctx context.Context) ([]Box, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, namespace_id, name, visibility, default_arm FROM boxes WHERE visibility='public'`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, namespace_id, name, visibility, default_branch FROM boxes WHERE visibility='public'`)
 	if err != nil {
 		return nil, err
 	}

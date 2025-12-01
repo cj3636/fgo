@@ -2,9 +2,32 @@ openapi: 3.1.0
 info:
   title: GoFile / fGo API (v0.1.0)
   version: 0.1.0
-  summary: Minimal git‑lite file server API. Idempotent blob uploads, plan→finalize push, linear history on `main`.
+  summary: Minimal git‑lite file server API. Idempotent blob uploads, plan→finalize place, linear history on `main`.
+  cmd_map:
+    space: namespace
+    box: repo
+    arm: branch
+    enact: commit
+    dupe: clone
+    grab: pull
+    call: fetch
+    place: push
+    replace: force‑push to branch head
+    store: push to specific arm
   description: |
     **Alpha notice**: pre‑release, breaking changes allowed until v1.0.
+    fGo : Git Command Map:
+      space ⇄ namespace
+      box ⇄ repo
+      arm ⇄ branch
+      enact ⇄ commit
+      dupe ⇄ clone
+      grab ⇄ pull
+      call ⇄ fetch
+      place ⇄ push
+      replace ⇄ force‑push to branch head
+      store ⇄ push to specific arm
+
 servers:
   - url: http://localhost:8080
     description: Local Development Server
@@ -14,8 +37,10 @@ servers:
 tags:
   - name: System
   - name: Blobs
+  - name: Spaces
   - name: Boxes
-  - name: Commits
+  - name: Arms
+  - name: Enacts
   - name: Files
 
 paths:
@@ -109,15 +134,15 @@ paths:
               properties:
                 name: { type: string, pattern: '^[a-z0-9-]{1,64}$' }
                 visibility: { $ref: '#/components/schemas/Visibility' }
-                default_branch: { type: string, default: main }
+                default_arm: { type: string, default: main }
       responses:
         '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Box' } } } }
         '409': { description: Box already exists }
 
-  /v1/boxes/{box}/push/plan:
+  /v1/boxes/{box}/place/plan:
     post:
-      tags: [ Commits ]
-      summary: Plan a push (which blobs are missing)
+      tags: [ Enacts ]
+      summary: Plan a place (which blobs are missing)
       description: Computes missing digests for a manifest (paths→sha256,size).
       security:
         - BearerAuth: [ ]
@@ -128,16 +153,16 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PushPlanRequest'
+              $ref: '#/components/schemas/placePlanRequest'
       responses:
-        '200': { description: Plan result, content: { application/json: { schema: { $ref: '#/components/schemas/PushPlanResponse' } } } }
+        '200': { description: Plan result, content: { application/json: { schema: { $ref: '#/components/schemas/placePlanResponse' } } } }
         '400': { description: Invalid entries }
 
-  /v1/boxes/{box}/push/finalize:
+  /v1/boxes/{box}/place/finalize:
     post:
-      tags: [ Commits ]
-      summary: Finalize a push and create a commit
-      description: Verifies presence of all blobs, writes commit, moves branch head if parent matches.
+      tags: [ Enacts ]
+      summary: Finalize a place and create a enact
+      description: Verifies presence of all blobs, writes enact, moves arm head if parent matches.
       security:
         - BearerAuth: [ ]
       parameters:
@@ -147,34 +172,34 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PushFinalizeRequest'
+              $ref: '#/components/schemas/placeFinalizeRequest'
       responses:
-        '201': { description: Commit created, content: { application/json: { schema: { $ref: '#/components/schemas/PushFinalizeResponse' } } } }
+        '201': { description: Enact created, content: { application/json: { schema: { $ref: '#/components/schemas/placeFinalizeResponse' } } } }
         '409': { description: Parent mismatch / concurrent update }
         '422': { description: Digest/size mismatch }
 
-  /v1/boxes/{box}/commits/latest:
+  /v1/boxes/{box}/enacts/latest:
     get:
-      tags: [ Commits ]
-      summary: Get latest commit for branch
+      tags: [ Enacts ]
+      summary: Get latest enact for arm
       security: [ ]
       parameters:
         - $ref: '#/components/parameters/box'
         - in: query
-          name: branch
+          name: arm
           schema: { type: string, default: main }
       responses:
-        '200': { description: Latest commit, content: { application/json: { schema: { $ref: '#/components/schemas/Commit' } } } }
+        '200': { description: Latest enact, content: { application/json: { schema: { $ref: '#/components/schemas/Enact' } } } }
         '404': { description: Not found }
 
-  /v1/files/{commit_id}:
+  /v1/files/{enact_id}:
     get:
       tags: [ Files ]
-      summary: Download a file by commit + path
-      description: Use query `path` to specify file path inside the commit tree.
+      summary: Download a file by enact + path
+      description: Use query `path` to specify file path inside the enact tree.
       security: [ ]
       parameters:
-        - name: commit_id
+        - name: enact_id
           in: path
           required: true
           schema: { type: string }
@@ -217,12 +242,12 @@ components:
 
     Box:
       type: object
-      required: [ id, name, visibility, default_branch ]
+      required: [ id, name, visibility, default_arm ]
       properties:
         id: { type: string }
         name: { type: string }
         visibility: { $ref: '#/components/schemas/Visibility' }
-        default_branch: { type: string, example: main }
+        default_arm: { type: string, example: main }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
 
@@ -235,13 +260,13 @@ components:
         size: { type: integer, minimum: 0 }
         mode: { type: integer, description: File mode (unix) }
 
-    Commit:
+    Enact:
       type: object
-      required: [ id, box_id, branch, timestamp, entries ]
+      required: [ id, box_id, arm, timestamp, entries ]
       properties:
         id: { type: string }
         box_id: { type: string }
-        branch: { type: string }
+        arm: { type: string }
         parent_id: { type: string, nullable: true }
         message: { type: string }
         author: { type: string }
@@ -250,7 +275,7 @@ components:
           type: array
           items: { $ref: '#/components/schemas/Entry' }
 
-    PushPlanRequest:
+    placePlanRequest:
       type: object
       required: [ entries ]
       properties:
@@ -258,7 +283,7 @@ components:
           type: array
           items: { $ref: '#/components/schemas/Entry' }
 
-    PushPlanResponse:
+    placePlanResponse:
       type: object
       required: [ missing, total ]
       properties:
@@ -270,22 +295,22 @@ components:
         total: { type: integer, minimum: 0 }
         will_replace: { type: integer, minimum: 0 }
 
-    PushFinalizeRequest:
+    placeFinalizeRequest:
       type: object
-      required: [ branch, entries ]
+      required: [ arm, entries ]
       properties:
-        branch: { type: string, default: main }
-        parent_commit_id: { type: string, nullable: true }
+        arm: { type: string, default: main }
+        parent_enact_id: { type: string, nullable: true }
         message: { type: string }
         entries:
           type: array
           items: { $ref: '#/components/schemas/Entry' }
 
-    PushFinalizeResponse:
+    placeFinalizeResponse:
       type: object
-      required: [ commit_id ]
+      required: [ enact_id ]
       properties:
-        commit_id: { type: string }
+        enact_id: { type: string }
         uploaded: { type: integer }
         reused: { type: integer }
 

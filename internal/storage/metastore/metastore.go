@@ -38,4 +38,5 @@ type MetadataStore interface {
 	MoveRef(ctx context.Context, boxID, branch, parentID, newID string) error
 	ListPublicBoxes(ctx context.Context) ([]Box, error)
 	GetCommitByID(ctx context.Context, id string) (Commit, error)
+	ListCommits(ctx context.Context, boxID, branch string, limit int) ([]Commit, error)
 }

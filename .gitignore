@@ -23,9 +23,13 @@ Thumbs.db
 # Database
 meta.db*
 
+# Tests
+*.test
+temp_part.txt
+
 # Coverage
 coverage.out
-
+*.coverprofile
 # Logs
 *.log
 
